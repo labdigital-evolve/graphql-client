@@ -1,0 +1,35 @@
+{
+  "name": "@evolve-packages/graphql-client",
+  "module": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/* --outdir dist --target=node --sourcemap=external",
+    "b": "bun ./build.ts"
+  },
+  "license": "MIT",
+  "private": true,
+  "author": "Boris Besemer <b.besemer@labdigital.nl>",
+  "exports": {
+    "./*": "./dist/*"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/*"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@graphql-typed-document-node/core": "^3.2.0",
+    "@types/bun": "latest",
+    "bun-plugin-isolated-decl": "^0.1.9",
+    "oxc-transform": "^0.53.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5",
+    "graphql": ">= 16.6.0"
+  }
+}
