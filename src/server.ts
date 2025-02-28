@@ -11,6 +11,8 @@ export type DocumentIdGenerator = <TResponse = unknown, TVariables = unknown>(
 interface ServerClientConfig<TRequestInit extends RequestInit = RequestInit> {
   endpoint: string;
   beforeRequest?: BeforeRequest<TRequestInit>;
+  // Always include the hashed query in a persisted query request even if a documentId is provided
+  alwaysIncludeQuery?: boolean;
   createDocumentIdFn?: DocumentIdGenerator;
 }
 
@@ -25,11 +27,13 @@ interface ServerClientConfig<TRequestInit extends RequestInit = RequestInit> {
 class ServerClient<TRequestInit extends RequestInit = RequestInit> {
   endpoint: string;
   private beforeRequest?: BeforeRequest<TRequestInit>;
+  private alwaysIncludeQuery: boolean;
   private createDocumentIdFn: DocumentIdGenerator;
 
   constructor(config: ServerClientConfig<TRequestInit>) {
     this.endpoint = config.endpoint;
     this.beforeRequest = config.beforeRequest;
+    this.alwaysIncludeQuery = config.alwaysIncludeQuery ?? false;
     this.createDocumentIdFn =
       config.createDocumentIdFn ?? getDocumentIdFromMeta;
   }
@@ -67,14 +71,15 @@ class ServerClient<TRequestInit extends RequestInit = RequestInit> {
     // Get the document type, either a query or a mutation
     const documentType = getDocumentType(documentString);
 
-    // If caching is disabled, run a POST request without document id
+    // If caching is disabled, run a POST request without document id or persisted query extension
+    // TODO: How do we want to handle cache disabling? Could be a flag on the constructor or in beforeRequest
 
     // If document is a mutation, run a POST request
 
     // If document is a query, run a persisted query
     // If not a persisted query and it has a PersistedQueryNotFoundError, run a POST request
 
-    // Fetch
+    // Fetch (REPLACE WITH ACTUAL FETCH!)
     const response = await fetch(this.endpoint, {
       ...options.fetchOptions,
       method: "POST",
