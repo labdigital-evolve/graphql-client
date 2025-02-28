@@ -1,5 +1,5 @@
 {
-  "name": "@evolve-packages/graphql-client",
+  "name": "evolve-graphql-client",
   "module": "src/index.ts",
   "type": "module",
   "scripts": {
