@@ -108,7 +108,7 @@ export function createServerClient<
       // Get the document type, either a query or a mutation
       const documentType = getDocumentType(documentString);
 
-      // If caching is disabled, run a POST request without document id or persisted query extension
+      // If persisted requests are disabled, run a POST request without document id or persisted query extension
       if (disablePersistedRequests) {
         const response = await fetch(endpoint, {
           ...options.fetchOptions,
