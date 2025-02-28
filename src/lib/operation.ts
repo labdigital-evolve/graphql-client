@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { pruneObject } from "./helpers";
 
 type Operation<TVariables> = {
   operationName: string;
@@ -114,4 +115,32 @@ export function createOperationURL<TVariables>(
   }
 
   return result;
+}
+
+/**
+ * Create a request body for a non-persisted GraphQL operation
+ * This is used when doing POST requests
+ */
+export function createOperationRequestBody<TVariables>(
+  operation: Operation<TVariables>
+): string {
+  // Include the query in the request body or when there is no document id
+  if (!operation.documentId || operation.includeQuery) {
+    return JSON.stringify(
+      pruneObject({
+        documentId: operation.documentId,
+        query: operation.document,
+        variables: operation.variables,
+        extensions: operation.extensions,
+      })
+    );
+  }
+  // Do not include the query in the request body when using a persisted document
+  return JSON.stringify(
+    pruneObject({
+      documentId: operation.documentId,
+      variables: operation.variables,
+      extensions: operation.extensions,
+    })
+  );
 }

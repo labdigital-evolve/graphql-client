@@ -2,6 +2,7 @@ import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
 import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
+import { createOperation } from "./lib/operation";
 import type { BeforeRequest } from "./lib/types";
 
 export type DocumentIdGenerator = <TResponse = unknown, TVariables = unknown>(
@@ -13,6 +14,10 @@ interface ServerClientConfig<TRequestInit extends RequestInit = RequestInit> {
   beforeRequest?: BeforeRequest<TRequestInit>;
   // Always include the hashed query in a persisted query request even if a documentId is provided
   alwaysIncludeQuery?: boolean;
+
+  // Disable persisted requests
+  disablePersistedRequests?: boolean;
+
   createDocumentIdFn?: DocumentIdGenerator;
 }
 
@@ -58,7 +63,7 @@ class ServerClient<TRequestInit extends RequestInit = RequestInit> {
     // Handle before request hook with fetch options
     await this.beforeRequest?.(options.fetchOptions);
 
-    // Create document (either from string or by parsing)
+    // Create document (either from string or by parsing the document ast node)
     const documentString = isNode(options.document)
       ? print(options.document)
       : options.document.toString();
@@ -66,12 +71,25 @@ class ServerClient<TRequestInit extends RequestInit = RequestInit> {
     // Create document id (for use in persisted documents)
     const documentId = this.createDocumentIdFn(options.document);
 
+    const operation = createOperation({
+      document: documentString,
+      documentId,
+      variables: options.variables,
+      includeQuery: this.alwaysIncludeQuery,
+    });
+
     // Merge default headers with fetch options
+    const headers = {
+      ...options.fetchOptions?.headers,
+      // Always set the content type to application/json
+      "Content-Type": "application/json",
+    };
 
     // Get the document type, either a query or a mutation
     const documentType = getDocumentType(documentString);
 
     // If caching is disabled, run a POST request without document id or persisted query extension
+
     // TODO: How do we want to handle cache disabling? Could be a flag on the constructor or in beforeRequest
 
     // If document is a mutation, run a POST request
