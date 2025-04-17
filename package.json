@@ -24,12 +24,12 @@
   ],
   "devDependencies": {
     "@graphql-typed-document-node/core": "^3.2.0",
-    "@types/bun": "latest",
-    "bun-plugin-isolated-decl": "^0.1.9",
-    "oxc-transform": "^0.53.0"
+    "@types/bun": "^1.2.10",
+    "bun-plugin-isolated-decl": "^0.1.10",
+    "oxc-transform": "^0.64.0"
   },
   "peerDependencies": {
-    "typescript": "^5",
-    "graphql": ">= 16.6.0"
+    "typescript": "^5.8.3",
+    "graphql": "^16.10.0"
   }
 }
