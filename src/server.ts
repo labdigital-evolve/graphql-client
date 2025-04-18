@@ -5,13 +5,38 @@ import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
 import { createOperation, createOperationRequestBody } from "./lib/operation";
 import type { BeforeRequest } from "./lib/types";
 
+// Define this near your other types, perhaps in a dedicated errors file later
+export class GraphQLClientError extends Error {
+  response: Response;
+  body?: unknown; // Use unknown instead of any for better type safety
+
+  constructor(message: string, response: Response, body?: unknown) {
+    super(message);
+    this.name = "GraphQLClientError";
+    this.response = response;
+    this.body = body;
+    // Ensure prototype chain is correct
+    Object.setPrototypeOf(this, GraphQLClientError.prototype);
+  }
+}
+
 export type DocumentIdGenerator = <TResponse = unknown, TVariables = unknown>(
   document: DocumentTypeDecoration<TResponse, TVariables>
 ) => string | undefined;
 
+export type AfterResponse<TResponseData = unknown> = (
+  response: Response,
+  parsedData: TResponseData
+) => Promise<void> | void;
+
 interface ServerClientConfig<TRequestInit extends RequestInit = RequestInit> {
   endpoint: string;
   beforeRequest?: BeforeRequest<TRequestInit>;
+  /**
+   * Hook that is called after the response is received. This returns the original response object and the parsed json data.
+   * This can be used to modify the response or the parsed data before it is returned to the caller or debug the response.
+   */
+  afterResponse?: AfterResponse;
   // Always include the hashed query in a persisted query request even if a documentId is provided
   alwaysIncludeQuery?: boolean;
 
@@ -65,6 +90,7 @@ export function createServerClient<
   const {
     endpoint,
     beforeRequest,
+    afterResponse,
     alwaysIncludeQuery = false,
     disablePersistedRequests = false,
     createDocumentIdFn = getDocumentIdFromMeta,
@@ -131,7 +157,67 @@ export function createServerClient<
         method: "POST",
         headers,
       });
-      return response.json();
+
+      // Check for HTTP errors first
+      if (!response.ok) {
+        let errorBody: unknown = undefined;
+        try {
+          // Try to get the error body as text
+          // Clone response to avoid consuming body if hook needs it later (though unlikely in error path)
+          errorBody = await response.clone().text();
+        } catch {
+          /* Ignore parsing errors for the error body */
+        }
+        throw new GraphQLClientError(
+          `HTTP Error: ${response.status} ${response.statusText}`,
+          response,
+          errorBody
+        );
+      }
+
+      // If response is OK, proceed to parse and handle hooks
+      let parsedData: TResponse; // Declared as TResponse, assignment will happen in try block
+      let responseClone: Response | undefined = undefined;
+
+      try {
+        // Clone only if the hook exists, before parsing the original
+        if (afterResponse) {
+          responseClone = response.clone();
+        }
+
+        // Parse the JSON from the original response
+        // If this fails, the catch block below handles it
+        parsedData = await response.json();
+      } catch (error) {
+        // Handle JSON parsing errors (or other errors during cloning/parsing)
+        // Use the original response for the error context
+        throw new GraphQLClientError(
+          error instanceof Error
+            ? error.message
+            : "Failed to process response body",
+          response, // Use the original response object
+          // Attempt to read body as text again if json parsing failed
+          await response
+            .clone()
+            .text()
+            .catch(() => undefined)
+        );
+      }
+
+      // --- Success Path ---
+      // If we reach here, response was OK and parsing succeeded.
+      // parsedData is guaranteed to be of type TResponse.
+
+      // Call the afterResponse hook if provided
+      if (afterResponse && responseClone) {
+        // No cast needed for parsedData, TS should infer TResponse
+        // responseClone is guaranteed to be defined here
+        await afterResponse(responseClone, parsedData);
+      }
+
+      // Return the successfully parsed data
+      // No cast needed, TS should infer TResponse
+      return parsedData;
     },
   };
 }
