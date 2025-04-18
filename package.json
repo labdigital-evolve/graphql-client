@@ -4,8 +4,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "bun build src/* --outdir dist --target=node --sourcemap=external",
-    "b": "bun ./build.ts"
+    "build": "bun ./build.ts"
   },
   "license": "MIT",
   "private": true,
