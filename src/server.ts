@@ -144,6 +144,12 @@ export function createServerClient<
       // Handle before request hook with fetch options
       await beforeRequest?.(options.fetchOptions);
 
+      /**
+       * ================================
+       * GraphQL operation processing
+       * ================================
+       */
+
       // Create document (either from string or by parsing the document ast node)
       const documentString = isNode(options.document)
         ? print(options.document)
@@ -159,15 +165,21 @@ export function createServerClient<
         includeQuery: alwaysIncludeQuery,
       });
 
+      // Get the document type, either a query or a mutation
+      const documentType = getDocumentType(documentString);
+
+      /**
+       * ================================
+       * Fetch request
+       * ================================
+       */
+
       // Merge default headers with fetch options
       const headers = {
         ...options.fetchOptions?.headers,
         // Always set the content type to application/json
         "Content-Type": "application/json",
       };
-
-      // Get the document type, either a query or a mutation
-      const documentType = getDocumentType(documentString);
 
       // If persisted requests are disabled, run a POST request without document id or persisted query extension
       if (disablePersistedRequests) {
@@ -189,6 +201,7 @@ export function createServerClient<
       const response = await fetch(endpoint, {
         ...options.fetchOptions,
         method: "POST",
+        body: createOperationRequestBody(operation),
         headers,
       });
 
