@@ -4,7 +4,7 @@
  */
 
 import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
-import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
@@ -13,6 +13,12 @@ import { getPackageName, getPackageVersion } from "./lib/package";
 import type { StrategyOptions } from "./lib/request";
 import { apqQuery, mutationPost, standardPost } from "./lib/request";
 import type { BeforeRequest as OnRequest } from "./lib/types";
+
+// Helper to set error status on span
+function setErrorStatus(span: Span, error: unknown): void {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+}
 
 // Define this near your other types, perhaps in a dedicated errors file later
 export class GraphQLClientError extends Error {
@@ -109,6 +115,53 @@ export function createServerClient<
     defaultFetchOptions, // Extract the new default options
   } = config;
 
+  // Helper to execute the appropriate request strategy
+  async function executeRequest<TVariables>(
+    options: StrategyOptions<TVariables, TRequestInit>
+  ): Promise<Response> {
+    const { config } = options;
+    const { disablePersistedOperations, documentType } = config;
+
+    if (disablePersistedOperations) {
+      return standardPost(options);
+    }
+    if (documentType === "mutation") {
+      return mutationPost(options);
+    }
+    return apqQuery(options);
+  }
+
+  // Helper to process response and handle errors
+  async function processResponse<TResponse>(
+    response: Response,
+    span: Span
+  ): Promise<TResponse> {
+    // Process onResponse hook if provided
+    if (onResponse) {
+      const responseClone = response.clone();
+      await onResponse(responseClone);
+    }
+
+    // Check for HTTP errors
+    if (!response.ok) {
+      const errorMessage = `HTTP Error: ${response.status} ${response.statusText}`;
+      setErrorStatus(span, errorMessage);
+      throw new GraphQLClientError(errorMessage, response);
+    }
+
+    // Parse JSON response
+    try {
+      return (await response.json()) as TResponse;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to process response body";
+      setErrorStatus(span, errorMessage);
+      throw new GraphQLClientError(errorMessage, response);
+    }
+  }
+
   // Create the client object that implements the ServerClient interface
   return {
     endpoint,
@@ -185,78 +238,24 @@ export function createServerClient<
        * ================================
        */
       return tracer.startActiveSpan(operation.operationName, async (span) => {
-        // === Execute the request using the new executor ===
-        let response: Response;
-        const { config } = requestOptions;
-        const { disablePersistedOperations, documentType } = config;
-
         try {
-          // --- Select Execution Strategy ---
-          // 1. Override: Standard POST
-          if (disablePersistedOperations) {
-            response = await standardPost(requestOptions);
-          }
-          // 2. Mutations: Always POST
-          else if (documentType === "mutation") {
-            response = await mutationPost(requestOptions);
-          }
-          // 3. Queries: APQ Flow
-          else {
-            response = await apqQuery(requestOptions);
-          }
-        } catch (error) {
-          const errorMessage = `Request failed for ${
-            operation.operationName
-          }: ${error instanceof Error ? error.message : String(error)}`;
-          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-          span.end();
+          // Execute the request using the appropriate strategy
+          const response = await executeRequest(requestOptions);
 
-          // We have no response object yet, so we throw the original error
+          // Process the response
+          const result = await processResponse<TResponse>(response, span);
+
+          span.end();
+          return result;
+        } catch (error) {
+          // If error hasn't been processed by a more specific handler
+          if (!(error instanceof GraphQLClientError)) {
+            setErrorStatus(span, error);
+          }
+
+          span.end();
           throw error;
         }
-
-        // Clone the response early if the hook exists
-        let responseClone: Response | undefined = undefined;
-        if (onResponse) {
-          responseClone = response.clone();
-          await onResponse(responseClone);
-        }
-
-        // Check for HTTP errors first
-        if (!response.ok) {
-          const errorMessage = `HTTP Error: ${response.status} ${response.statusText}`;
-          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-          // Throw the error with the potentially parsed body or text body
-          throw new GraphQLClientError(
-            errorMessage,
-            response // Pass the original response
-          );
-        }
-
-        // If response is OK, proceed to parse and handle hooks
-        let parsedData: TResponse; // Declared as TResponse, assignment will happen in try block
-
-        try {
-          // Parse the JSON from the original response
-          // If this fails, the catch block below handles it
-          parsedData = await response.json();
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : "Failed to process response body";
-          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-          // Throw a more specific error for JSON parsing issues
-          throw new GraphQLClientError(
-            errorMessage,
-            response // Use the original response object
-          );
-        }
-
-        span.end();
-
-        // Return the parsed data on success
-        return parsedData;
       });
     },
   };

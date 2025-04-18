@@ -22,28 +22,6 @@ function extractOperationName(document: string): string {
   return match?.[1] || "(GraphQL)";
 }
 
-// /**
-//  * Determines if the request is using a persisted document
-//  * @param operation - The operation
-//  * @returns True if this is a persisted document request
-//  */
-// export function isPersistedDocumentRequest<TVariables>(
-//   operation: Operation<TVariables>
-// ): boolean {
-//   return !!operation.documentId && !operation.includeQuery;
-// }
-
-// /**
-//  * Determines if the request is using a persisted query
-//  * @param operation - The operation
-//  * @returns True if this is a persisted query request
-//  */
-// export function isPersistedQueryRequest<TVariables>(
-//   operation: Operation<TVariables>
-// ): boolean {
-//   return !!operation.extensions.persistedQuery;
-// }
-
 /**
  * Create a GraphQL operation
  * This contains all of the (meta)data for a GraphQL operation

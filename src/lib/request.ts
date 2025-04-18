@@ -129,31 +129,28 @@ export async function apqQuery<TVariables, TRequestInit extends RequestInit>(
   const fallbackExtensions =
     alwaysIncludeQuery || !operation.documentId ? extensions : undefined;
 
-  try {
-    const headers = new Headers(fetchOptions.headers);
-    headers.delete("Content-Type"); // GET requests shouldn't have Content-Type header
+  const headers = new Headers(fetchOptions.headers);
+  headers.delete("Content-Type"); // GET requests shouldn't have Content-Type header
 
-    const response = await fetch(url.toString(), {
-      ...fetchOptions,
-      method: "GET",
-      body: undefined,
-      headers,
-    });
+  const response = await fetch(url.toString(), {
+    ...fetchOptions,
+    method: "GET",
+    body: undefined,
+    headers,
+  });
 
-    if (response.ok) {
-      const responseClone = response.clone();
-      try {
-        const potentialErrorData = await responseClone.json();
-        if (!isPersistedQueryNotFoundError(potentialErrorData)) {
-          return response;
-        }
-      } catch (e) {
-        console.warn("APQ GET response was not valid JSON:", e);
+  if (response.ok) {
+    const responseClone = response.clone();
+    try {
+      const potentialErrorData = await responseClone.json();
+      if (!isPersistedQueryNotFoundError(potentialErrorData)) {
         return response;
       }
+    } catch (e) {
+      // If the response is not valid JSON, return the original response
+      // This would need to be handled by the caller
+      return response;
     }
-  } catch (networkError) {
-    console.warn("APQ GET request failed, falling back to POST:", networkError);
   }
 
   return apqPostFallback(options, fallbackExtensions);
