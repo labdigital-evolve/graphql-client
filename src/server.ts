@@ -181,27 +181,26 @@ export function createServerClient<
         "Content-Type": "application/json",
       };
 
-      // If persisted requests are disabled, run a POST request without document id or persisted query extension
-      if (disablePersistedRequests) {
-        const response = await fetch(endpoint, {
-          ...options.fetchOptions,
-          method: "POST",
-          headers,
-          body: createOperationRequestBody(operation),
-        });
-        return response.json();
+      if (documentType === "query") {
+        // If document is a query, run a persisted query
+        // If not a persisted query and it has a PersistedQueryNotFoundError, run a POST request
       }
-      // TODO: How do we want to handle cache disabling? Could be a flag on the constructor or in beforeRequest
+
+      // If persisted requests are disabled, run a POST request without document id or persisted query extension
+      const body = disablePersistedRequests
+        ? createOperationRequestBody(operation)
+        : createOperationRequestBody({
+            ...operation,
+            // Remove the document id and extensions to disable persisted queries
+            documentId: undefined,
+            extensions: {},
+          });
 
       // If document is a mutation, run a POST request
-
-      // If document is a query, run a persisted query
-      // If not a persisted query and it has a PersistedQueryNotFoundError, run a POST request
-
       const response = await fetch(endpoint, {
         ...options.fetchOptions,
         method: "POST",
-        body: createOperationRequestBody(operation),
+        body,
         headers,
       });
 
