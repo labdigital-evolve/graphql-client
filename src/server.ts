@@ -1,36 +1,16 @@
-/**
- * Creates a server-side GraphQL client with support for hooks,
- * persisted queries, and error handling.
- */
-
 import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
-import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
+import { type Span, trace } from "@opentelemetry/api";
 import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
+import { setErrorStatus } from "./lib/helpers";
 import { type Operation, createOperation } from "./lib/operation";
 import { getPackageName, getPackageVersion } from "./lib/package";
 import { apqQuery, mutationPost, standardPost } from "./lib/request";
-import type { BeforeRequest as OnRequest } from "./lib/types";
-
-// Helper to set error status on span
-function setErrorStatus(span: Span, error: unknown): void {
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-}
-
-// Define this near your other types, perhaps in a dedicated errors file later
-export class GraphQLClientError extends Error {
-  response: Response;
-
-  constructor(message: string, response: Response) {
-    super(message);
-    this.name = "GraphQLClientError";
-    this.response = response;
-    // Ensure prototype chain is correct
-    Object.setPrototypeOf(this, GraphQLClientError.prototype);
-  }
-}
+import {
+  GraphQLClientError,
+  type BeforeRequest as OnRequest,
+} from "./lib/types";
 
 const tracer = trace.getTracer(getPackageName(), getPackageVersion());
 

@@ -1,3 +1,4 @@
+import { type Span, SpanStatusCode } from "@opentelemetry/api";
 import type { GraphQLError } from "graphql";
 
 /**
@@ -58,4 +59,10 @@ export function isPersistedQueryNotFoundError(response: unknown): boolean {
     }
   }
   return false;
+}
+
+// Helper to set error status on span
+export function setErrorStatus(span: Span, error: unknown): void {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
 }
