@@ -59,10 +59,7 @@ export type DocumentIdGenerator = <TResponse = unknown, TVariables = unknown>(
   document: DocumentTypeDecoration<TResponse, TVariables>
 ) => string | undefined;
 
-export type AfterResponse<TResponseData = unknown> = (
-  response: Response,
-  parsedData: TResponseData
-) => Promise<void> | void;
+export type AfterResponse = (response: Response) => Promise<void> | void;
 
 interface ServerClientConfig<TRequestInit extends RequestInit = RequestInit> {
   endpoint: string;
@@ -221,6 +218,13 @@ export function createServerClient<
         // headers are already part of mergedFetchOptions
       });
 
+      // Clone the response early if the hook exists
+      let responseClone: Response | undefined = undefined;
+      if (afterResponse) {
+        responseClone = response.clone();
+        await afterResponse(responseClone);
+      }
+
       // Check for HTTP errors first
       if (!response.ok) {
         // Use the helper function to get the error body
@@ -236,20 +240,13 @@ export function createServerClient<
 
       // If response is OK, proceed to parse and handle hooks
       let parsedData: TResponse; // Declared as TResponse, assignment will happen in try block
-      let responseClone: Response | undefined = undefined;
 
       try {
-        // Clone only if the hook exists, before parsing the original
-        if (afterResponse) {
-          responseClone = response.clone();
-        }
-
         // Parse the JSON from the original response
         // If this fails, the catch block below handles it
         parsedData = await response.json();
       } catch (error) {
-        // Handle JSON parsing errors (or other errors during cloning/parsing)
-        // Use the original response for the error context
+        // Throw a more specific error for JSON parsing issues
         throw new GraphQLClientError(
           error instanceof Error
             ? error.message
@@ -263,19 +260,7 @@ export function createServerClient<
         );
       }
 
-      // --- Success Path ---
-      // If we reach here, response was OK and parsing succeeded.
-      // parsedData is guaranteed to be of type TResponse.
-
-      // Call the afterResponse hook if provided
-      if (afterResponse && responseClone) {
-        // No cast needed for parsedData, TS should infer TResponse
-        // responseClone is guaranteed to be defined here
-        await afterResponse(responseClone, parsedData);
-      }
-
-      // Return the successfully parsed data
-      // No cast needed, TS should infer TResponse
+      // Return the parsed data on success
       return parsedData;
     },
   };
