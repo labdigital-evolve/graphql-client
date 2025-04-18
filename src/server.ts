@@ -40,7 +40,7 @@ import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
 import { parseErrorBody } from "./lib/helpers";
 import { createOperation, createOperationRequestBody } from "./lib/operation";
 import { getPackageName, getPackageVersion } from "./lib/package";
-import type { BeforeRequest } from "./lib/types";
+import type { BeforeRequest as OnRequest } from "./lib/types";
 
 // Define this near your other types, perhaps in a dedicated errors file later
 export class GraphQLClientError extends Error {
@@ -63,16 +63,16 @@ export type DocumentIdGenerator = <TResponse = unknown, TVariables = unknown>(
   document: DocumentTypeDecoration<TResponse, TVariables>
 ) => string | undefined;
 
-export type AfterResponse = (response: Response) => Promise<void> | void;
+export type OnResponse = (response: Response) => Promise<void> | void;
 
 interface ServerClientConfig<TRequestInit extends RequestInit = RequestInit> {
   endpoint: string;
-  beforeRequest?: BeforeRequest<TRequestInit>;
+  onRequest?: OnRequest<TRequestInit>;
   /**
    * Hook that is called after the response is received. This returns the original response object and the parsed json data.
    * This can be used to modify the response or the parsed data before it is returned to the caller or debug the response.
    */
-  afterResponse?: AfterResponse;
+  onResponse?: OnResponse;
   /**
    * Always include the hashed query in a persisted query request even if a documentId is provided
    * This is useful for debugging and for ensuring that the query is always sent to the server when persisted documents are not used
@@ -131,8 +131,8 @@ export function createServerClient<
   // Extract configuration with defaults
   const {
     endpoint,
-    beforeRequest,
-    afterResponse,
+    onRequest,
+    onResponse,
     alwaysIncludeQuery = false,
     disablePersistedOperations = false,
     createDocumentIdFn = getDocumentIdFromMeta,
@@ -164,7 +164,7 @@ export function createServerClient<
       };
 
       // Handle before request hook with *original* per-request fetch options
-      await beforeRequest?.(options.fetchOptions);
+      await onRequest?.(options.fetchOptions);
 
       /**
        * ================================
@@ -222,9 +222,9 @@ export function createServerClient<
 
         // Clone the response early if the hook exists
         let responseClone: Response | undefined = undefined;
-        if (afterResponse) {
+        if (onResponse) {
           responseClone = response.clone();
-          await afterResponse(responseClone);
+          await onResponse(responseClone);
         }
 
         // Check for HTTP errors first
