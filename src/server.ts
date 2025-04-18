@@ -37,21 +37,19 @@ import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
-import { parseErrorBody } from "./lib/helpers";
-import { createOperation, createOperationRequestBody } from "./lib/operation";
+import { createOperation } from "./lib/operation";
 import { getPackageName, getPackageVersion } from "./lib/package";
+import { executeRequest } from "./lib/request";
 import type { BeforeRequest as OnRequest } from "./lib/types";
 
 // Define this near your other types, perhaps in a dedicated errors file later
 export class GraphQLClientError extends Error {
   response: Response;
-  body?: unknown; // Use unknown instead of any for better type safety
 
-  constructor(message: string, response: Response, body?: unknown) {
+  constructor(message: string, response: Response) {
     super(message);
     this.name = "GraphQLClientError";
     this.response = response;
-    this.body = body;
     // Ensure prototype chain is correct
     Object.setPrototypeOf(this, GraphQLClientError.prototype);
   }
@@ -171,7 +169,6 @@ export function createServerClient<
        * GraphQL operation processing
        * ================================
        */
-
       // Create document (either from string or by parsing the document ast node)
       const documentString = isNode(options.document)
         ? print(options.document)
@@ -180,11 +177,10 @@ export function createServerClient<
       // Create document id (for use in persisted documents)
       const documentId = createDocumentIdFn(options.document);
 
-      const operation = await createOperation({
+      const operation = createOperation({
         document: documentString,
         documentId,
         variables: options.variables,
-        includeQuery: alwaysIncludeQuery,
       });
 
       // Get the document type, either a query or a mutation
@@ -195,30 +191,33 @@ export function createServerClient<
        * Fetch request
        * ================================
        */
-
-      if (documentType === "query") {
-        // If document is a query, run a persisted query
-        // If not a persisted query and it has a PersistedQueryNotFoundError, run a POST request
-      }
-
-      // If persisted requests are disabled, run a POST request without document id or persisted query extension
-      const body = disablePersistedOperations
-        ? createOperationRequestBody(operation)
-        : createOperationRequestBody({
-            ...operation,
-            // Remove the document id and extensions to disable persisted queries
-            documentId: undefined,
-            extensions: {},
-          });
-
       return tracer.startActiveSpan(operation.operationName, async (span) => {
-        // If document is a mutation, run a POST request
-        const response = await fetch(endpoint, {
-          ...mergedFetchOptions, // Use the merged fetch options
-          method: "POST",
-          body,
-          // headers are already part of mergedFetchOptions
-        });
+        // === Execute the request using the new executor ===
+        const requestConfig = {
+          disablePersistedOperations,
+          alwaysIncludeQuery,
+          documentType,
+        };
+
+        let response: Response;
+        try {
+          response = await executeRequest({
+            endpoint: endpoint,
+            operation: operation,
+            config: requestConfig,
+            fetchOptions: mergedFetchOptions,
+          });
+        } catch (error) {
+          // Catch network errors or other errors during fetch execution
+          const errorMessage = `Request failed for ${
+            operation.operationName
+          }: ${error instanceof Error ? error.message : String(error)}`;
+          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+          span.end();
+          // Re-throw or handle as appropriate
+          // Consider wrapping in GraphQLClientError if it makes sense
+          throw error;
+        }
 
         // Clone the response early if the hook exists
         let responseClone: Response | undefined = undefined;
@@ -229,15 +228,12 @@ export function createServerClient<
 
         // Check for HTTP errors first
         if (!response.ok) {
-          // Use the helper function to get the error body
-          const errorBody = await parseErrorBody(response);
           const errorMessage = `HTTP Error: ${response.status} ${response.statusText}`;
           span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
           // Throw the error with the potentially parsed body or text body
           throw new GraphQLClientError(
             errorMessage,
-            response, // Pass the original response
-            errorBody
+            response // Pass the original response
           );
         }
 
@@ -257,12 +253,7 @@ export function createServerClient<
           // Throw a more specific error for JSON parsing issues
           throw new GraphQLClientError(
             errorMessage,
-            response, // Use the original response object
-            // Attempt to read body as text again if json parsing failed
-            await response
-              .clone()
-              .text()
-              .catch(() => undefined)
+            response // Use the original response object
           );
         }
 

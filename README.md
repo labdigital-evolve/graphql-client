@@ -19,3 +19,24 @@ Server client
 Extends fetch with:
 - Correct headers
 
+
+
+## Server request decision tree
+
+
+- If mutation
+    - Always send a POST request
+- If query
+    - Try APQ Get request
+    - If `PersistedQueryNotFound` error then send a POST request
+
+-- individual calls
+
+- When using POST requests (non-APQ)
+    - If `alwaysIncludeQuery` or no `documentId` available
+        - Add query to request
+    - Else
+        - Only send documentId, variables and extensions
+
+- When using GET requests (Persisted documents or APQ) with search parameters
+    - Add documentId and variables to search parameters, add extensions if `documentId` is not set or `alwaysIncludeQuery` is enabled
