@@ -4,9 +4,9 @@ import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
 import { setErrorStatus } from "./lib/helpers";
-import { type Operation, createOperation } from "./lib/operation";
+import { createOperation } from "./lib/operation";
 import { getPackageName, getPackageVersion } from "./lib/package";
-import { apqQuery, mutationPost, standardPost } from "./lib/request";
+import { executeRequest } from "./lib/request";
 import {
   GraphQLClientError,
   type BeforeRequest as OnRequest,
@@ -93,46 +93,6 @@ export function createServerClient<
     createDocumentIdFn = getDocumentIdFromMeta,
     defaultFetchOptions, // Extract the new default options
   } = config;
-
-  /**
-   * Executes the appropriate request strategy
-   * This will return a response object that can be processed by the processResponse function
-   */
-  async function executeRequest<TVariables>({
-    endpoint,
-    operation,
-    documentType,
-    fetchOptions,
-    alwaysIncludeQuery,
-  }: {
-    endpoint: string;
-    documentType: "query" | "mutation";
-    operation: Operation<TVariables>;
-    fetchOptions: TRequestInit;
-    alwaysIncludeQuery: boolean;
-  }): Promise<Response> {
-    if (disablePersistedOperations) {
-      return standardPost({
-        endpoint,
-        operation,
-        fetchOptions,
-      });
-    }
-    if (documentType === "mutation") {
-      return mutationPost({
-        endpoint,
-        operation,
-        fetchOptions,
-        alwaysIncludeQuery,
-      });
-    }
-    return apqQuery({
-      endpoint,
-      operation,
-      fetchOptions,
-      alwaysIncludeQuery,
-    });
-  }
 
   /**
    * Processes the response from a given execution
@@ -234,13 +194,14 @@ export function createServerClient<
        */
       return tracer.startActiveSpan(operation.operationName, async (span) => {
         try {
-          // Execute the request using the appropriate strategy
+          // Execute the request using the generator-based approach
           const response = await executeRequest({
             endpoint,
             documentType,
             operation,
             fetchOptions,
             alwaysIncludeQuery,
+            disablePersistedOperations,
           });
 
           // Process the response
