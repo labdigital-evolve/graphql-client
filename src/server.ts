@@ -72,13 +72,19 @@ interface ServerClientConfig<TRequestInit extends RequestInit = RequestInit> {
    * This can be used to modify the response or the parsed data before it is returned to the caller or debug the response.
    */
   afterResponse?: AfterResponse;
-  // Always include the hashed query in a persisted query request even if a documentId is provided
+  /**
+   * Always include the hashed query in a persisted query request even if a documentId is provided
+   * This is useful for debugging and for ensuring that the query is always sent to the server when persisted documents are not used
+   */
   alwaysIncludeQuery?: boolean;
 
-  // Disable persisted requests
-  disablePersistedRequests?: boolean;
+  // Disable persisted operations
+  disablePersistedOperations?: boolean;
 
   createDocumentIdFn?: DocumentIdGenerator;
+
+  /** Default fetch options to be applied to every request. Per-request options will override these defaults. */
+  defaultFetchOptions?: TRequestInit;
 }
 
 /**
@@ -127,8 +133,9 @@ export function createServerClient<
     beforeRequest,
     afterResponse,
     alwaysIncludeQuery = false,
-    disablePersistedRequests = false,
+    disablePersistedOperations = false,
     createDocumentIdFn = getDocumentIdFromMeta,
+    defaultFetchOptions, // Extract the new default options
   } = config;
 
   // Create the client object that implements the ServerClient interface
@@ -141,7 +148,21 @@ export function createServerClient<
       variables?: TVariables;
       fetchOptions?: TRequestInit;
     }): Promise<TResponse> {
-      // Handle before request hook with fetch options
+      // --- Merge Fetch Options ---
+      // Start with default options, then merge per-request options
+      const mergedFetchOptions = {
+        ...defaultFetchOptions,
+        ...options.fetchOptions,
+        // Special handling for headers: merge default and per-request headers
+        headers: {
+          ...(defaultFetchOptions?.headers ?? {}), // Use empty object if default headers are null/undefined
+          ...(options.fetchOptions?.headers ?? {}), // Use empty object if per-request headers are null/undefined
+          // Always set the content type to application/json, potentially overriding others
+          "Content-Type": "application/json",
+        },
+      };
+
+      // Handle before request hook with *original* per-request fetch options
       await beforeRequest?.(options.fetchOptions);
 
       /**
@@ -174,12 +195,8 @@ export function createServerClient<
        * ================================
        */
 
-      // Merge default headers with fetch options
-      const headers = {
-        ...options.fetchOptions?.headers,
-        // Always set the content type to application/json
-        "Content-Type": "application/json",
-      };
+      // Headers are already handled in mergedFetchOptions
+      const headers = mergedFetchOptions.headers; // Use the merged headers
 
       if (documentType === "query") {
         // If document is a query, run a persisted query
@@ -187,7 +204,7 @@ export function createServerClient<
       }
 
       // If persisted requests are disabled, run a POST request without document id or persisted query extension
-      const body = disablePersistedRequests
+      const body = disablePersistedOperations
         ? createOperationRequestBody(operation)
         : createOperationRequestBody({
             ...operation,
@@ -198,10 +215,10 @@ export function createServerClient<
 
       // If document is a mutation, run a POST request
       const response = await fetch(endpoint, {
-        ...options.fetchOptions,
+        ...mergedFetchOptions, // Use the merged fetch options
         method: "POST",
         body,
-        headers,
+        // headers are already part of mergedFetchOptions
       });
 
       // Check for HTTP errors first
