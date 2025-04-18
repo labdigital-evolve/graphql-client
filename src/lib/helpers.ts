@@ -1,4 +1,4 @@
-import type { ResponseWithErrors } from "./types";
+import type { GraphQLError } from "graphql";
 
 /**
  * Removes keys from an object if the value is empty
@@ -36,17 +36,26 @@ export async function parseErrorBody(response: Response): Promise<unknown> {
   }
 }
 
-// Helper to check for APQ "Not Found" errors
-export function isPersistedQueryNotFoundError(
-  responseData: ResponseWithErrors
-): boolean {
-  // Example check: Modify this based on how your GraphQL server signals this error
-  return (
-    Array.isArray(responseData?.errors) &&
-    responseData.errors.some(
-      (err: { message?: string; extensions?: { code?: string } }) =>
-        err?.message?.includes("PersistedQueryNotFound") || // Apollo Server convention
-        err?.extensions?.code === "PERSISTED_QUERY_NOT_FOUND" // Other possible convention
-    )
-  );
+/**
+ * Checks if the response is a PersistedQueryNotFound error
+ */
+export function isPersistedQueryNotFoundError(response: unknown): boolean {
+  if (
+    typeof response === "object" &&
+    response !== null &&
+    Object.prototype.hasOwnProperty.call(response, "errors")
+  ) {
+    const errors = (response as { errors?: unknown }).errors;
+    if (Array.isArray(errors)) {
+      return errors.some((err: unknown) => {
+        if (typeof err !== "object" || err === null) return false;
+        const error = err as GraphQLError;
+        return (
+          error.message?.includes("PersistedQueryNotFound") ||
+          error.extensions?.code === "PERSISTED_QUERY_NOT_FOUND"
+        );
+      });
+    }
+  }
+  return false;
 }

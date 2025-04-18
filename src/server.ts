@@ -8,9 +8,8 @@ import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
-import { createOperation } from "./lib/operation";
+import { type Operation, createOperation } from "./lib/operation";
 import { getPackageName, getPackageVersion } from "./lib/package";
-import type { StrategyOptions } from "./lib/request";
 import { apqQuery, mutationPost, standardPost } from "./lib/request";
 import type { BeforeRequest as OnRequest } from "./lib/types";
 
@@ -115,23 +114,51 @@ export function createServerClient<
     defaultFetchOptions, // Extract the new default options
   } = config;
 
-  // Helper to execute the appropriate request strategy
-  async function executeRequest<TVariables>(
-    options: StrategyOptions<TVariables, TRequestInit>
-  ): Promise<Response> {
-    const { config } = options;
-    const { disablePersistedOperations, documentType } = config;
-
+  /**
+   * Executes the appropriate request strategy
+   * This will return a response object that can be processed by the processResponse function
+   */
+  async function executeRequest<TVariables>({
+    endpoint,
+    operation,
+    documentType,
+    fetchOptions,
+    alwaysIncludeQuery,
+  }: {
+    endpoint: string;
+    documentType: "query" | "mutation";
+    operation: Operation<TVariables>;
+    fetchOptions: TRequestInit;
+    alwaysIncludeQuery: boolean;
+  }): Promise<Response> {
     if (disablePersistedOperations) {
-      return standardPost(options);
+      return standardPost({
+        endpoint,
+        operation,
+        fetchOptions,
+      });
     }
     if (documentType === "mutation") {
-      return mutationPost(options);
+      return mutationPost({
+        endpoint,
+        operation,
+        fetchOptions,
+        alwaysIncludeQuery,
+      });
     }
-    return apqQuery(options);
+    return apqQuery({
+      endpoint,
+      operation,
+      fetchOptions,
+      alwaysIncludeQuery,
+    });
   }
 
-  // Helper to process response and handle errors
+  /**
+   * Processes the response from a given execution
+   *
+   * This will run the onResponse hook, check the HTTP status and try to parse the response as JSON.
+   */
   async function processResponse<TResponse>(
     response: Response,
     span: Span
@@ -220,18 +247,6 @@ export function createServerClient<
       // Get the document type, either a query or a mutation
       const documentType = getDocumentType(documentString);
 
-      // Construct the options object needed by the strategy functions
-      const requestOptions: StrategyOptions<TVariables, TRequestInit> = {
-        endpoint,
-        operation,
-        config: {
-          disablePersistedOperations,
-          alwaysIncludeQuery,
-          documentType,
-        },
-        fetchOptions,
-      };
-
       /**
        * ================================
        * Fetch request
@@ -240,7 +255,13 @@ export function createServerClient<
       return tracer.startActiveSpan(operation.operationName, async (span) => {
         try {
           // Execute the request using the appropriate strategy
-          const response = await executeRequest(requestOptions);
+          const response = await executeRequest({
+            endpoint,
+            documentType,
+            operation,
+            fetchOptions,
+            alwaysIncludeQuery,
+          });
 
           // Process the response
           const result = await processResponse<TResponse>(response, span);

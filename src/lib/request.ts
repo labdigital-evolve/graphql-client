@@ -1,39 +1,11 @@
 // Assuming GraphQLClientError is defined/exported from server.ts for now
-import type { getDocumentType } from "./document";
+import { isPersistedQueryNotFoundError } from "./helpers";
 import type { Operation } from "./operation";
 import {
   createRequestBody,
   createUrl,
   getPersistedQueryExtension,
 } from "./operation";
-
-type GraphQLError = {
-  message: string;
-  locations?: { line: number; column: number }[];
-  path?: (string | number)[];
-  extensions?: Record<string, unknown>;
-};
-
-export function isPersistedQueryNotFoundError(responseData: unknown): boolean {
-  if (
-    typeof responseData === "object" &&
-    responseData !== null &&
-    Object.prototype.hasOwnProperty.call(responseData, "errors")
-  ) {
-    const errors = (responseData as { errors?: unknown }).errors;
-    if (Array.isArray(errors)) {
-      return errors.some((err: unknown) => {
-        if (typeof err !== "object" || err === null) return false;
-        const error = err as GraphQLError;
-        return (
-          error.message?.includes("PersistedQueryNotFound") ||
-          error.extensions?.code === "PERSISTED_QUERY_NOT_FOUND"
-        );
-      });
-    }
-  }
-  return false;
-}
 
 export type PostPayload<TVariables> = {
   query?: string;
@@ -42,25 +14,19 @@ export type PostPayload<TVariables> = {
   extensions?: Record<string, unknown>;
 };
 
-export interface RequestConfig {
-  disablePersistedOperations: boolean;
-  alwaysIncludeQuery: boolean;
-  documentType: ReturnType<typeof getDocumentType>;
-}
-
-export interface StrategyOptions<TVariables, TRequestInit extends RequestInit> {
-  endpoint: string;
-  operation: Operation<TVariables>;
-  config: RequestConfig;
-  fetchOptions: TRequestInit;
-}
-
 /** Standard POST request when persisted operations are disabled */
 export async function standardPost<
   TVariables,
   TRequestInit extends RequestInit
->(options: StrategyOptions<TVariables, TRequestInit>): Promise<Response> {
-  const { endpoint, operation, fetchOptions } = options;
+>({
+  endpoint,
+  operation,
+  fetchOptions,
+}: {
+  endpoint: string;
+  operation: Operation<TVariables>;
+  fetchOptions: TRequestInit;
+}): Promise<Response> {
   const payload = {
     query: operation.document,
     variables: operation.variables,
@@ -79,10 +45,17 @@ export async function standardPost<
 export async function mutationPost<
   TVariables,
   TRequestInit extends RequestInit
->(options: StrategyOptions<TVariables, TRequestInit>): Promise<Response> {
-  const { endpoint, operation, config, fetchOptions } = options;
-  const { alwaysIncludeQuery } = config;
-
+>({
+  endpoint,
+  operation,
+  fetchOptions,
+  alwaysIncludeQuery,
+}: {
+  endpoint: string;
+  operation: Operation<TVariables>;
+  fetchOptions: TRequestInit;
+  alwaysIncludeQuery: boolean;
+}): Promise<Response> {
   let payload: PostPayload<TVariables>;
   if (operation.documentId) {
     payload = {
@@ -107,12 +80,17 @@ export async function mutationPost<
 }
 
 /** APQ GET request for queries with POST fallback */
-export async function apqQuery<TVariables, TRequestInit extends RequestInit>(
-  options: StrategyOptions<TVariables, TRequestInit>
-): Promise<Response> {
-  const { endpoint, operation, config, fetchOptions } = options;
-  const { alwaysIncludeQuery } = config;
-
+export async function apqQuery<TVariables, TRequestInit extends RequestInit>({
+  endpoint,
+  operation,
+  fetchOptions,
+  alwaysIncludeQuery,
+}: {
+  endpoint: string;
+  operation: Operation<TVariables>;
+  fetchOptions: TRequestInit;
+  alwaysIncludeQuery: boolean;
+}): Promise<Response> {
   let url: URL;
   let extensions: ReturnType<typeof getPersistedQueryExtension> | undefined;
 
@@ -153,19 +131,29 @@ export async function apqQuery<TVariables, TRequestInit extends RequestInit>(
     }
   }
 
-  return apqPostFallback(options, fallbackExtensions);
+  return apqPostFallback({
+    endpoint,
+    operation,
+    fetchOptions,
+    extensions: fallbackExtensions,
+  });
 }
 
 /** APQ POST fallback request for queries */
 export async function apqPostFallback<
   TVariables,
   TRequestInit extends RequestInit
->(
-  options: StrategyOptions<TVariables, TRequestInit>,
-  extensions?: ReturnType<typeof getPersistedQueryExtension>
-): Promise<Response> {
-  const { endpoint, operation, fetchOptions } = options;
-
+>({
+  endpoint,
+  operation,
+  fetchOptions,
+  extensions,
+}: {
+  endpoint: string;
+  operation: Operation<TVariables>;
+  fetchOptions: TRequestInit;
+  extensions?: ReturnType<typeof getPersistedQueryExtension>;
+}): Promise<Response> {
   const payload: PostPayload<TVariables> = {
     query: operation.document,
     variables: operation.variables,
