@@ -13,3 +13,23 @@ export const pruneObject = <T>(object: T): Partial<T> => {
 
 const objectIsNotEmpty = (value: unknown) =>
   value && Object.keys(value).length > 0;
+
+// Helper function to parse error body: tries JSON, falls back to text
+export async function parseErrorBody(response: Response): Promise<unknown> {
+  try {
+    // Important: Clone before parsing to avoid consuming the body
+    return await response.clone().json();
+  } catch (jsonError) {
+    try {
+      // If JSON fails, try text
+      return await response.clone().text();
+    } catch (textError) {
+      // If text also fails, log and return undefined
+      console.error(
+        "Failed to read error response body as JSON or text:",
+        textError
+      );
+      return undefined;
+    }
+  }
+}

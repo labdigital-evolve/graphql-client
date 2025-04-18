@@ -1,7 +1,42 @@
+/**
+ * @fileoverview Creates a server-side GraphQL client with support for hooks,
+ * persisted queries (TODO), and robust error handling.
+ *
+ * The core `createServerClient` function configures and returns a client object
+ * with a `fetch` method. The `fetch` method orchestrates the following steps:
+ *
+ * 1. **Configuration:** Extracts endpoint, hooks (`beforeRequest`, `afterResponse`),
+ *    and options (persisted queries, document ID generation) from the initial config.
+ * 2. **`beforeRequest` Hook:** Executes the optional `beforeRequest` hook, allowing
+ *    modification of fetch options before the request is sent.
+ * 3. **Document Processing:** Converts the GraphQL document (AST or string) into a
+ *    string representation and generates a document ID using the configured function.
+ * 4. **Operation Setup:** Creates the operation payload, including the query string,
+ *    variables, and potentially the document ID or extensions for persisted queries.
+ * 5. **Fetch Execution:**
+ *    - If `disablePersistedRequests` is true, sends a standard POST request.
+ *    - (TODO: Implement persisted query flow - attempt GET/POST with ID, fallback POST).
+ *    - Currently sends a basic POST request.
+ * 6. **Error Handling:**
+ *    - Checks if `response.ok` is true.
+ *    - If not OK, attempts to parse the body first as JSON, then as text (using
+ *      `parseErrorBody`), and throws a `GraphQLClientError` containing the original
+ *      response and the parsed/text body.
+ * 7. **Success Handling:**
+ *    - If response is OK, attempts to parse the body as JSON.
+ *    - If JSON parsing fails, throws a `GraphQLClientError`.
+ * 8. **`afterResponse` Hook:** If the request was successful (OK status and JSON
+ *    parsed), executes the optional `afterResponse` hook with a clone of the
+ *    original response and the parsed data.
+ * 9. **Return Value:** Returns the parsed JSON data (`TResponse`) on success, or
+ *    throws a `GraphQLClientError` on failure.
+ */
+
 import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
 import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
+import { parseErrorBody } from "./lib/helpers";
 import { createOperation, createOperationRequestBody } from "./lib/operation";
 import type { BeforeRequest } from "./lib/types";
 
@@ -151,7 +186,6 @@ export function createServerClient<
       // If document is a query, run a persisted query
       // If not a persisted query and it has a PersistedQueryNotFoundError, run a POST request
 
-      // Fetch (REPLACE WITH ACTUAL FETCH!)
       const response = await fetch(endpoint, {
         ...options.fetchOptions,
         method: "POST",
@@ -160,17 +194,13 @@ export function createServerClient<
 
       // Check for HTTP errors first
       if (!response.ok) {
-        let errorBody: unknown = undefined;
-        try {
-          // Try to get the error body as text
-          // Clone response to avoid consuming body if hook needs it later (though unlikely in error path)
-          errorBody = await response.clone().text();
-        } catch {
-          /* Ignore parsing errors for the error body */
-        }
+        // Use the helper function to get the error body
+        const errorBody = await parseErrorBody(response);
+
+        // Throw the error with the potentially parsed body or text body
         throw new GraphQLClientError(
           `HTTP Error: ${response.status} ${response.statusText}`,
-          response,
+          response, // Pass the original response
           errorBody
         );
       }
