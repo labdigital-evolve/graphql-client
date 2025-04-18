@@ -147,22 +147,31 @@ export function createServerClient<
       variables?: TVariables;
       fetchOptions?: TRequestInit;
     }): Promise<TResponse> {
-      // --- Merge Fetch Options ---
-      // Start with default options, then merge per-request options
-      const mergedFetchOptions = {
+      // --- Prepare Fetch Options ---
+      const baseOptions = {
         ...defaultFetchOptions,
         ...options.fetchOptions,
-        // Special handling for headers: merge default and per-request headers
-        headers: {
-          ...(defaultFetchOptions?.headers ?? {}), // Use empty object if default headers are null/undefined
-          ...(options.fetchOptions?.headers ?? {}), // Use empty object if per-request headers are null/undefined
-          // Always set the content type to application/json, potentially overriding others
-          "Content-Type": "application/json",
-        },
       };
 
-      // Handle before request hook with *original* per-request fetch options
-      await onRequest?.(options.fetchOptions);
+      const headers = new Headers(defaultFetchOptions?.headers);
+      if (options.fetchOptions?.headers) {
+        new Headers(options.fetchOptions.headers).forEach((value, key) => {
+          headers.set(key, value);
+        });
+      }
+      headers.set("Content-Type", "application/json");
+
+      // Start with merged options
+      let fetchOptions = {
+        ...baseOptions,
+        headers: headers,
+      } as TRequestInit;
+
+      // --- Run onRequest Hook (if provided) ---
+      // The hook receives the current options and returns the options to use.
+      if (onRequest) {
+        fetchOptions = await onRequest(fetchOptions);
+      }
 
       /**
        * ================================
@@ -202,10 +211,10 @@ export function createServerClient<
         let response: Response;
         try {
           response = await executeRequest({
-            endpoint: endpoint,
-            operation: operation,
+            endpoint,
+            operation,
             config: requestConfig,
-            fetchOptions: mergedFetchOptions,
+            fetchOptions, // Use the potentially modified fetchOptions
           });
         } catch (error) {
           // Catch network errors or other errors during fetch execution
@@ -214,8 +223,7 @@ export function createServerClient<
           }: ${error instanceof Error ? error.message : String(error)}`;
           span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
           span.end();
-          // Re-throw or handle as appropriate
-          // Consider wrapping in GraphQLClientError if it makes sense
+
           throw error;
         }
 

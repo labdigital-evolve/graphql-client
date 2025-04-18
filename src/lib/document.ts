@@ -6,8 +6,9 @@ import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
  */
 export const getDocumentIdFromMeta = <TResult, TVariables>(
   query: DocumentTypeDecoration<TResult, TVariables>
-  // biome-ignore lint/suspicious/noExplicitAny: Typing is only dynamically available if you enable it in client preset
-): string | undefined => (query as any)?.__meta__?.documentId;
+): string | undefined =>
+  (query as unknown as { __meta__?: { __documentId?: string } })?.__meta__
+    ?.__documentId;
 
 /**
  * Get document hash for automatic persisted queries
@@ -24,8 +25,8 @@ export const getDocumentIdFromMeta = <TResult, TVariables>(
  */
 export const getDocumentHashFromMeta = <TResult, TVariables>(
   query: DocumentTypeDecoration<TResult, TVariables>
-  // biome-ignore lint/suspicious/noExplicitAny: Typing is only dynamically available if you enable it in client preset
-): string | undefined => (query as any)?.__meta__?.hash;
+): string | undefined =>
+  (query as unknown as { __meta__?: { hash?: string } })?.__meta__?.hash;
 
 /**
  * Get the document type from the stringified document
