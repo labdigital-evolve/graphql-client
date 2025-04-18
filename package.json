@@ -1,6 +1,7 @@
 {
   "name": "evolve-graphql-client",
   "module": "src/index.ts",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "build": "bun build src/* --outdir dist --target=node --sourcemap=external",
@@ -32,5 +33,8 @@
   "peerDependencies": {
     "typescript": "^5.8.3",
     "graphql": "^16.10.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0"
   }
 }

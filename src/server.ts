@@ -33,11 +33,13 @@
  */
 
 import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
 import { parseErrorBody } from "./lib/helpers";
 import { createOperation, createOperationRequestBody } from "./lib/operation";
+import { getPackageName, getPackageVersion } from "./lib/package";
 import type { BeforeRequest } from "./lib/types";
 
 // Define this near your other types, perhaps in a dedicated errors file later
@@ -54,6 +56,8 @@ export class GraphQLClientError extends Error {
     Object.setPrototypeOf(this, GraphQLClientError.prototype);
   }
 }
+
+const tracer = trace.getTracer(getPackageName(), getPackageVersion());
 
 export type DocumentIdGenerator = <TResponse = unknown, TVariables = unknown>(
   document: DocumentTypeDecoration<TResponse, TVariables>
@@ -192,9 +196,6 @@ export function createServerClient<
        * ================================
        */
 
-      // Headers are already handled in mergedFetchOptions
-      const headers = mergedFetchOptions.headers; // Use the merged headers
-
       if (documentType === "query") {
         // If document is a query, run a persisted query
         // If not a persisted query and it has a PersistedQueryNotFoundError, run a POST request
@@ -210,58 +211,66 @@ export function createServerClient<
             extensions: {},
           });
 
-      // If document is a mutation, run a POST request
-      const response = await fetch(endpoint, {
-        ...mergedFetchOptions, // Use the merged fetch options
-        method: "POST",
-        body,
-        // headers are already part of mergedFetchOptions
+      return tracer.startActiveSpan(operation.operationName, async (span) => {
+        // If document is a mutation, run a POST request
+        const response = await fetch(endpoint, {
+          ...mergedFetchOptions, // Use the merged fetch options
+          method: "POST",
+          body,
+          // headers are already part of mergedFetchOptions
+        });
+
+        // Clone the response early if the hook exists
+        let responseClone: Response | undefined = undefined;
+        if (afterResponse) {
+          responseClone = response.clone();
+          await afterResponse(responseClone);
+        }
+
+        // Check for HTTP errors first
+        if (!response.ok) {
+          // Use the helper function to get the error body
+          const errorBody = await parseErrorBody(response);
+          const errorMessage = `HTTP Error: ${response.status} ${response.statusText}`;
+          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+          // Throw the error with the potentially parsed body or text body
+          throw new GraphQLClientError(
+            errorMessage,
+            response, // Pass the original response
+            errorBody
+          );
+        }
+
+        // If response is OK, proceed to parse and handle hooks
+        let parsedData: TResponse; // Declared as TResponse, assignment will happen in try block
+
+        try {
+          // Parse the JSON from the original response
+          // If this fails, the catch block below handles it
+          parsedData = await response.json();
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to process response body";
+          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+          // Throw a more specific error for JSON parsing issues
+          throw new GraphQLClientError(
+            errorMessage,
+            response, // Use the original response object
+            // Attempt to read body as text again if json parsing failed
+            await response
+              .clone()
+              .text()
+              .catch(() => undefined)
+          );
+        }
+
+        span.end();
+
+        // Return the parsed data on success
+        return parsedData;
       });
-
-      // Clone the response early if the hook exists
-      let responseClone: Response | undefined = undefined;
-      if (afterResponse) {
-        responseClone = response.clone();
-        await afterResponse(responseClone);
-      }
-
-      // Check for HTTP errors first
-      if (!response.ok) {
-        // Use the helper function to get the error body
-        const errorBody = await parseErrorBody(response);
-
-        // Throw the error with the potentially parsed body or text body
-        throw new GraphQLClientError(
-          `HTTP Error: ${response.status} ${response.statusText}`,
-          response, // Pass the original response
-          errorBody
-        );
-      }
-
-      // If response is OK, proceed to parse and handle hooks
-      let parsedData: TResponse; // Declared as TResponse, assignment will happen in try block
-
-      try {
-        // Parse the JSON from the original response
-        // If this fails, the catch block below handles it
-        parsedData = await response.json();
-      } catch (error) {
-        // Throw a more specific error for JSON parsing issues
-        throw new GraphQLClientError(
-          error instanceof Error
-            ? error.message
-            : "Failed to process response body",
-          response, // Use the original response object
-          // Attempt to read body as text again if json parsing failed
-          await response
-            .clone()
-            .text()
-            .catch(() => undefined)
-        );
-      }
-
-      // Return the parsed data on success
-      return parsedData;
     },
   };
 }
