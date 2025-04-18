@@ -14,7 +14,7 @@ declare global {
  * You can use beforeRequest to disable cache for specific requests
  */
 const serverClient = createServerClient({
-  beforeRequest: async (fetchOptions) => {
+  onRequest: async (fetchOptions) => {
     if (process.env.DISABLE_CACHE === "true") {
       if (fetchOptions) {
         // Disable cache
@@ -23,21 +23,19 @@ const serverClient = createServerClient({
       }
     }
 
-    return {};
+    return fetchOptions;
   },
   endpoint: "http://localhost:3000/graphql",
 });
 
 serverClient.fetch({
-  // @ts-expect-error - Need to fix
   document: `
     query {
       hello
     }
-  ` as TypedDocumentNode<{ hello: string }, undefined>,
+  ` as unknown as TypedDocumentNode<{ hello: string }, undefined>,
   variables: undefined,
   fetchOptions: {
-    // This is overridden when DISABLE_CACHE is true
     cache: "force-cache",
   },
 });
