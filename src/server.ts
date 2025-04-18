@@ -1,35 +1,6 @@
 /**
- * @fileoverview Creates a server-side GraphQL client with support for hooks,
- * persisted queries (TODO), and robust error handling.
- *
- * The core `createServerClient` function configures and returns a client object
- * with a `fetch` method. The `fetch` method orchestrates the following steps:
- *
- * 1. **Configuration:** Extracts endpoint, hooks (`beforeRequest`, `afterResponse`),
- *    and options (persisted queries, document ID generation) from the initial config.
- * 2. **`beforeRequest` Hook:** Executes the optional `beforeRequest` hook, allowing
- *    modification of fetch options before the request is sent.
- * 3. **Document Processing:** Converts the GraphQL document (AST or string) into a
- *    string representation and generates a document ID using the configured function.
- * 4. **Operation Setup:** Creates the operation payload, including the query string,
- *    variables, and potentially the document ID or extensions for persisted queries.
- * 5. **Fetch Execution:**
- *    - If `disablePersistedRequests` is true, sends a standard POST request.
- *    - (TODO: Implement persisted query flow - attempt GET/POST with ID, fallback POST).
- *    - Currently sends a basic POST request.
- * 6. **Error Handling:**
- *    - Checks if `response.ok` is true.
- *    - If not OK, attempts to parse the body first as JSON, then as text (using
- *      `parseErrorBody`), and throws a `GraphQLClientError` containing the original
- *      response and the parsed/text body.
- * 7. **Success Handling:**
- *    - If response is OK, attempts to parse the body as JSON.
- *    - If JSON parsing fails, throws a `GraphQLClientError`.
- * 8. **`afterResponse` Hook:** If the request was successful (OK status and JSON
- *    parsed), executes the optional `afterResponse` hook with a clone of the
- *    original response and the parsed data.
- * 9. **Return Value:** Returns the parsed JSON data (`TResponse`) on success, or
- *    throws a `GraphQLClientError` on failure.
+ * Creates a server-side GraphQL client with support for hooks,
+ * persisted queries, and error handling.
  */
 
 import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
@@ -39,12 +10,8 @@ import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
 import { createOperation } from "./lib/operation";
 import { getPackageName, getPackageVersion } from "./lib/package";
-import type { ExecuteStrategyOptions } from "./lib/request";
-import {
-  executeApqQueryStrategy,
-  executeMutationPost,
-  executeStandardPost,
-} from "./lib/request";
+import type { StrategyOptions } from "./lib/request";
+import { apqQuery, mutationPost, standardPost } from "./lib/request";
 import type { BeforeRequest as OnRequest } from "./lib/types";
 
 // Define this near your other types, perhaps in a dedicated errors file later
@@ -201,7 +168,7 @@ export function createServerClient<
       const documentType = getDocumentType(documentString);
 
       // Construct the options object needed by the strategy functions
-      const requestOptions: ExecuteStrategyOptions<TVariables, TRequestInit> = {
+      const requestOptions: StrategyOptions<TVariables, TRequestInit> = {
         endpoint,
         operation,
         config: {
@@ -227,15 +194,15 @@ export function createServerClient<
           // --- Select Execution Strategy ---
           // 1. Override: Standard POST
           if (disablePersistedOperations) {
-            response = await executeStandardPost(requestOptions);
+            response = await standardPost(requestOptions);
           }
           // 2. Mutations: Always POST
           else if (documentType === "mutation") {
-            response = await executeMutationPost(requestOptions);
+            response = await mutationPost(requestOptions);
           }
           // 3. Queries: APQ Flow
           else {
-            response = await executeApqQueryStrategy(requestOptions);
+            response = await apqQuery(requestOptions);
           }
         } catch (error) {
           const errorMessage = `Request failed for ${
