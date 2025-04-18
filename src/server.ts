@@ -39,7 +39,12 @@ import { isNode } from "graphql/language/ast";
 import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
 import { createOperation } from "./lib/operation";
 import { getPackageName, getPackageVersion } from "./lib/package";
-import { executeRequest } from "./lib/request";
+import type { ExecuteStrategyOptions } from "./lib/request";
+import {
+  executeApqQueryStrategy,
+  executeMutationPost,
+  executeStandardPost,
+} from "./lib/request";
 import type { BeforeRequest as OnRequest } from "./lib/types";
 
 // Define this near your other types, perhaps in a dedicated errors file later
@@ -195,6 +200,18 @@ export function createServerClient<
       // Get the document type, either a query or a mutation
       const documentType = getDocumentType(documentString);
 
+      // Construct the options object needed by the strategy functions
+      const requestOptions: ExecuteStrategyOptions<TVariables, TRequestInit> = {
+        endpoint,
+        operation,
+        config: {
+          disablePersistedOperations,
+          alwaysIncludeQuery,
+          documentType,
+        },
+        fetchOptions,
+      };
+
       /**
        * ================================
        * Fetch request
@@ -202,28 +219,32 @@ export function createServerClient<
        */
       return tracer.startActiveSpan(operation.operationName, async (span) => {
         // === Execute the request using the new executor ===
-        const requestConfig = {
-          disablePersistedOperations,
-          alwaysIncludeQuery,
-          documentType,
-        };
-
         let response: Response;
+        const { config } = requestOptions;
+        const { disablePersistedOperations, documentType } = config;
+
         try {
-          response = await executeRequest({
-            endpoint,
-            operation,
-            config: requestConfig,
-            fetchOptions, // Use the potentially modified fetchOptions
-          });
+          // --- Select Execution Strategy ---
+          // 1. Override: Standard POST
+          if (disablePersistedOperations) {
+            response = await executeStandardPost(requestOptions);
+          }
+          // 2. Mutations: Always POST
+          else if (documentType === "mutation") {
+            response = await executeMutationPost(requestOptions);
+          }
+          // 3. Queries: APQ Flow
+          else {
+            response = await executeApqQueryStrategy(requestOptions);
+          }
         } catch (error) {
-          // Catch network errors or other errors during fetch execution
           const errorMessage = `Request failed for ${
             operation.operationName
           }: ${error instanceof Error ? error.message : String(error)}`;
           span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
           span.end();
 
+          // We have no response object yet, so we throw the original error
           throw error;
         }
 

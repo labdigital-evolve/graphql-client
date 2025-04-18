@@ -89,7 +89,8 @@ export function getPersistedQueryExtension(document: string): {
 export function createUrl<TVariables>(
   url: string,
   operation: Operation<TVariables>,
-  extensions?: Record<string, unknown>
+  extensions?: Record<string, unknown>,
+  alwaysIncludeQuery = false // Default to standard APQ behaviour
 ): URL {
   const result = new URL(url);
 
@@ -104,8 +105,10 @@ export function createUrl<TVariables>(
     result.searchParams.set("variables", JSON.stringify(operation.variables));
   }
 
-  // Optionally add extensions to the URL (only used for APQ)
-  if (extensions) {
+  // Add extensions:
+  // - Always if alwaysIncludeQuery is true
+  // - Only if documentId is missing and alwaysIncludeQuery is false
+  if (extensions && (alwaysIncludeQuery || !operation.documentId)) {
     result.searchParams.set("extensions", JSON.stringify(extensions));
   }
 
