@@ -1,6 +1,6 @@
 {
-  "name": "evolve-graphql-client",
-  "module": "src/index.ts",
+  "name": "@labdigital/graphql-client",
+  "module": "dist/server.js",
   "version": "0.0.1",
   "type": "module",
   "scripts": {
