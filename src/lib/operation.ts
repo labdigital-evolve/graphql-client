@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
+import { getDocumentType } from "./document";
 import { pruneObject } from "./helpers";
+import type { OperationType } from "./types";
 
 export interface Operation<TVariables> {
+  type: OperationType;
   operationName: string;
   document: string;
   documentId?: string;
@@ -39,6 +42,7 @@ export function createOperation<TVariables>({
   documentId?: string;
 }): Operation<TVariables> {
   return {
+    type: getDocumentType(document),
     operationName: extractOperationName(document),
     document,
     variables,
@@ -67,8 +71,7 @@ export function getPersistedQueryExtension(document: string): {
 export function createUrl<TVariables>(
   url: string,
   operation: Operation<TVariables>,
-  extensions?: Record<string, unknown>,
-  alwaysIncludeQuery = false // Default to standard APQ behaviour
+  extensions?: Record<string, unknown>
 ): URL {
   const result = new URL(url);
 
@@ -83,10 +86,7 @@ export function createUrl<TVariables>(
     result.searchParams.set("variables", JSON.stringify(operation.variables));
   }
 
-  // Add extensions:
-  // - Always if alwaysIncludeQuery is true
-  // - Only if documentId is missing and alwaysIncludeQuery is false
-  if (extensions && (alwaysIncludeQuery || !operation.documentId)) {
+  if (extensions) {
     result.searchParams.set("extensions", JSON.stringify(extensions));
   }
 

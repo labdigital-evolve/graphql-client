@@ -41,7 +41,6 @@ export async function standardPost<
   });
 }
 
-/** Mutation POST requests */
 export async function mutationPost<
   TVariables,
   TRequestInit extends RequestInit
@@ -98,23 +97,20 @@ export async function apqQuery<TVariables, TRequestInit extends RequestInit>({
     extensions = alwaysIncludeQuery
       ? getPersistedQueryExtension(operation.document)
       : undefined;
-    url = createUrl(endpoint, operation, extensions, alwaysIncludeQuery);
+    url = createUrl(endpoint, operation, extensions);
   } else {
     extensions = getPersistedQueryExtension(operation.document);
-    url = createUrl(endpoint, operation, extensions, alwaysIncludeQuery);
+    url = createUrl(endpoint, operation, extensions);
   }
 
   const fallbackExtensions =
     alwaysIncludeQuery || !operation.documentId ? extensions : undefined;
 
-  const headers = new Headers(fetchOptions.headers);
-  headers.delete("Content-Type"); // GET requests shouldn't have Content-Type header
-
   const response = await fetch(url.toString(), {
     ...fetchOptions,
     method: "GET",
     body: undefined,
-    headers,
+    headers: fetchOptions.headers,
   });
 
   if (response.ok) {

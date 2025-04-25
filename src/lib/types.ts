@@ -22,3 +22,5 @@ export class GraphQLClientError extends Error {
     Object.setPrototypeOf(this, GraphQLClientError.prototype);
   }
 }
+
+export type OperationType = "query" | "mutation" | "subscription";

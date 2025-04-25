@@ -2,7 +2,7 @@ import type { DocumentTypeDecoration } from "@graphql-typed-document-node/core";
 import { type Span, trace } from "@opentelemetry/api";
 import { print } from "graphql";
 import { isNode } from "graphql/language/ast";
-import { getDocumentIdFromMeta, getDocumentType } from "./lib/document";
+import { getDocumentIdFromMeta } from "./lib/document";
 import { setErrorStatus } from "./lib/helpers";
 import { type Operation, createOperation } from "./lib/operation";
 import { getPackageName, getPackageVersion } from "./lib/package";
@@ -48,8 +48,6 @@ interface ServerClientConfig<TRequestInit extends RequestInit = RequestInit> {
  * Defines the public API for performing GraphQL operations
  */
 export interface ServerClient<TRequestInit extends RequestInit = RequestInit> {
-  endpoint: string;
-
   /**
    * Overload for queries without variables
    */
@@ -99,18 +97,16 @@ export function createServerClient<
    * This will return a response object that can be processed by the processResponse function
    */
   async function executeRequest<TVariables>({
-    endpoint,
     operation,
-    documentType,
     fetchOptions,
-    alwaysIncludeQuery,
   }: {
-    endpoint: string;
-    documentType: "query" | "mutation";
     operation: Operation<TVariables>;
     fetchOptions: TRequestInit;
-    alwaysIncludeQuery: boolean;
   }): Promise<Response> {
+    if (operation.type === "subscription") {
+      throw new Error("Subscriptions are not supported");
+    }
+
     if (disablePersistedOperations) {
       return standardPost({
         endpoint,
@@ -118,7 +114,7 @@ export function createServerClient<
         fetchOptions,
       });
     }
-    if (documentType === "mutation") {
+    if (operation.type === "mutation") {
       return mutationPost({
         endpoint,
         operation,
@@ -171,76 +167,52 @@ export function createServerClient<
 
   // Create the client object that implements the ServerClient interface
   return {
-    endpoint,
-
     // Implementation with unified types to handle both overloads
-    async fetch<TResponse, TVariables>(options: {
+    async fetch<TResponse, TVariables>({
+      document,
+      variables,
+      fetchOptions,
+    }: {
       document: DocumentTypeDecoration<TResponse, TVariables>;
       variables?: TVariables;
       fetchOptions?: TRequestInit;
     }): Promise<TResponse> {
-      // --- Prepare Fetch Options ---
-      const baseOptions = {
-        ...defaultFetchOptions,
-        ...options.fetchOptions,
-      };
-
-      const headers = new Headers(defaultFetchOptions?.headers);
-      if (options.fetchOptions?.headers) {
-        new Headers(options.fetchOptions.headers).forEach((value, key) => {
-          headers.set(key, value);
+      const combinedHeaders = new Headers(defaultFetchOptions?.headers);
+      if (fetchOptions?.headers) {
+        new Headers(fetchOptions.headers).forEach((value, key) => {
+          combinedHeaders.set(key, value); // Per-request overrides default
         });
       }
-      headers.set("Content-Type", "application/json");
 
       // Start with merged options
-      let fetchOptions = {
-        ...baseOptions,
-        headers: headers,
+      fetchOptions = {
+        ...defaultFetchOptions,
+        ...fetchOptions,
+        headers: combinedHeaders,
       } as TRequestInit;
 
-      // --- Run onRequest Hook (if provided) ---
-      // The hook receives the current options and returns the options to use.
       if (onRequest) {
         fetchOptions = await onRequest(fetchOptions);
       }
 
-      /**
-       * ================================
-       * GraphQL operation processing
-       * ================================
-       */
       // Create document (either from string or by parsing the document ast node)
-      const documentString = isNode(options.document)
-        ? print(options.document)
-        : options.document.toString();
-
-      // Create document id (for use in persisted documents)
-      const documentId = createDocumentIdFn(options.document);
+      const documentString = isNode(document)
+        ? print(document)
+        : document.toString();
 
       const operation = createOperation({
         document: documentString,
-        documentId,
-        variables: options.variables,
+        documentId: createDocumentIdFn(document),
+        variables: variables,
       });
 
-      // Get the document type, either a query or a mutation
-      const documentType = getDocumentType(documentString);
-
-      /**
-       * ================================
-       * Fetch request
-       * ================================
-       */
+      // Start the request span
       return tracer.startActiveSpan(operation.operationName, async (span) => {
         try {
           // Execute the request using the appropriate strategy
           const response = await executeRequest({
-            endpoint,
-            documentType,
             operation,
             fetchOptions,
-            alwaysIncludeQuery,
           });
 
           // Process the response
