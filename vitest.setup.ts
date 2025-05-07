@@ -22,6 +22,16 @@ const graphqlHandlers = [
       data: { posts: posts.map((post) => ({ id: post.id })) },
     });
   }),
+  graphql.query("ListPostsFail", () => {
+    return HttpResponse.json(
+      {
+        errors: [
+          { name: "AuthenticationFailed", message: "Authentication failed" },
+        ],
+      },
+      { status: 401 }
+    );
+  }),
 ];
 
 const server = setupServer(...graphqlHandlers);

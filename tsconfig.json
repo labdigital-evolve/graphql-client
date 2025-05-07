@@ -28,5 +28,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // Don't need isolated declarations for tooling
+  "exclude": ["vitest.config.ts"]
 }

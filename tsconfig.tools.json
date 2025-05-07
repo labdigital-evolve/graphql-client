@@ -1,0 +1,8 @@
+// Only created to not mess with isolated declarations for tooling
+{
+  "extends": "tsconfig.json",
+  "compilerOptions": {
+    "isolatedDeclarations": false
+  },
+  "include": ["vitest.config.ts"]
+}

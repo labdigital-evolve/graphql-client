@@ -30,4 +30,22 @@ describe("Server client", () => {
       data: { posts: [{ id: 1 }] },
     });
   });
+
+  it("should return an error on 401 with the response", async () => {
+    const serverClient = createServerClient({
+      endpoint: "http://localhost:3000/graphql",
+      disablePersistedOperations: true,
+    });
+
+    await expect(() =>
+      serverClient.fetch({
+        document: `
+        query ListPostsFail {
+          posts { id }
+        }
+      ` as unknown as TypedDocumentNode<{ posts: { id: number }[] }, undefined>,
+        variables: undefined,
+      })
+    ).rejects.toThrowError(/401 Unauthorized/);
+  });
 });
