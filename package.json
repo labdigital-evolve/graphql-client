@@ -25,6 +25,7 @@
 	"files": ["dist"],
 	"devDependencies": {
 		"@biomejs/biome": "1.9.4",
+		"@changesets/cli": "^2.29.3",
 		"@graphql-typed-document-node/core": "^3.2.0",
 		"@types/bun": "^1.2.10",
 		"bun-plugin-isolated-decl": "^0.1.10",
