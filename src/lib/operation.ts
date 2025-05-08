@@ -7,6 +7,9 @@ export interface Operation<TVariables> {
   type: OperationType;
   operationName: string;
   document: string;
+  /**
+   * The id of the document, this is used for Persisted documents and predefined
+   */
   documentId?: string;
   variables: TVariables | undefined;
 }

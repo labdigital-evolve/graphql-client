@@ -1,5 +1,5 @@
 import { HttpResponse, graphql } from "msw";
-import { setupServer } from "msw/node";
+import { type SetupServerApi, setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll } from "vitest";
 
 const posts = [
@@ -34,7 +34,7 @@ const graphqlHandlers = [
   }),
 ];
 
-const server = setupServer(...graphqlHandlers);
+export const server: SetupServerApi = setupServer(...graphqlHandlers);
 
 // Start server before all tests
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
