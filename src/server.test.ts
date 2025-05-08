@@ -130,7 +130,7 @@ describe("Server client", () => {
 
         // Just making sure that the op is being called
         if (params.get("op") !== "ListPostIds") {
-          return new HttpResponse("Not found", { status: 404 });
+          return HttpResponse.json({}, { status: 200 });
         }
 
         return HttpResponse.json({
