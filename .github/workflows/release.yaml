@@ -1,0 +1,65 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  validate:
+    name: Validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+    runs-on: "ubuntu-latest"
+    env:
+      CI: true
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.12
+
+      - name: Check formatting and typing
+        run: bun check
+
+      - name: Run tests
+        run: bun test
+
+      - name: Run build
+        run: bun build
+
+  release:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.12
+
+      - name: Run build
+        run: pnpm build
+
+      - name: Create and publish versions
+        uses: changesets/action@v1
+        with:
+          title: "Release new version"
+          commit: "update version"
+          publish: pnpm publish:ci
+          version: pnpm publish:version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
