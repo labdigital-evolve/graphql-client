@@ -34,16 +34,16 @@ A specialized GraphQL client for Evolve and its derived platforms that provides 
 
 ```bash
 # Using npm
-npm install evolve-graphql-client
+npm install @labdigital/evolve-graphql-client
 
 # Using yarn
-yarn add evolve-graphql-client
+yarn add @labdigital/evolve-graphql-client
 
 # Using pnpm
-pnpm add evolve-graphql-client
+pnpm add @labdigital/evolve-graphql-client
 
 # Using bun
-bun add evolve-graphql-client
+bun add @labdigital/evolve-graphql-client
 ```
 
 ## Usage
