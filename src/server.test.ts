@@ -1,155 +1,155 @@
-import { http, HttpResponse } from "msw";
 import { createHash } from "node:crypto";
+import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import { server } from "../vitest.setup";
 import { TypedDocumentString } from "./lib/test";
 import { createServerClient } from "./server";
 describe("Server client", () => {
-  it("should be able to create a server client", () => {
-    const serverClient = createServerClient({
-      endpoint: "http://localhost:3000/graphql",
-    });
+	it("should be able to create a server client", () => {
+		const serverClient = createServerClient({
+			endpoint: "http://localhost:3000/graphql",
+		});
 
-    expect(serverClient).toBeDefined();
-  });
+		expect(serverClient).toBeDefined();
+	});
 
-  it("should be able to fetch a query", async () => {
-    const serverClient = createServerClient({
-      endpoint: "http://localhost:3000/graphql",
-      disablePersistedOperations: true,
-    });
+	it("should be able to fetch a query", async () => {
+		const serverClient = createServerClient({
+			endpoint: "http://localhost:3000/graphql",
+			disablePersistedOperations: true,
+		});
 
-    const document = new TypedDocumentString(
-      `
+		const document = new TypedDocumentString(
+			`
         query ListPostIds {
           posts { id }
         }
       `,
-      undefined
-    );
+			undefined,
+		);
 
-    const result = await serverClient.fetch({
-      document,
-      variables: undefined,
-    });
+		const result = await serverClient.fetch({
+			document,
+			variables: undefined,
+		});
 
-    expect(result).toEqual({
-      data: { posts: [{ id: 1 }] },
-    });
-  });
+		expect(result).toEqual({
+			data: { posts: [{ id: 1 }] },
+		});
+	});
 
-  it("should return an error on 401 with the response", async () => {
-    const serverClient = createServerClient({
-      endpoint: "http://localhost:3000/graphql",
-      disablePersistedOperations: true,
-    });
+	it("should return an error on 401 with the response", async () => {
+		const serverClient = createServerClient({
+			endpoint: "http://localhost:3000/graphql",
+			disablePersistedOperations: true,
+		});
 
-    const document = new TypedDocumentString(
-      `
+		const document = new TypedDocumentString(
+			`
         query ListPostsFail {
           posts { id }
         }
       `,
-      undefined
-    );
+			undefined,
+		);
 
-    await expect(() =>
-      serverClient.fetch({
-        document,
-        variables: undefined,
-      })
-    ).rejects.toThrowError(/401 Unauthorized/);
-  });
+		await expect(() =>
+			serverClient.fetch({
+				document,
+				variables: undefined,
+			}),
+		).rejects.toThrowError(/401 Unauthorized/);
+	});
 
-  it("works with APQ by hashing the document", async () => {
-    const serverClient = createServerClient({
-      endpoint: "http://localhost:3000/graphql",
-    });
+	it("works with APQ by hashing the document", async () => {
+		const serverClient = createServerClient({
+			endpoint: "http://localhost:3000/graphql",
+		});
 
-    const document = new TypedDocumentString(
-      `
+		const document = new TypedDocumentString(
+			`
         query ListPostIds {
           posts { id }
         }
       `,
-      undefined
-    );
+			undefined,
+		);
 
-    const expectedHash = createHash("sha-256")
-      .update(document.toString())
-      .digest("hex");
+		const expectedHash = createHash("sha-256")
+			.update(document.toString())
+			.digest("hex");
 
-    // Handler for APQ request that contains the expected hash
-    server.use(
-      http.get("http://localhost:3000/graphql", ({ request }) => {
-        const params = new URL(request.url).searchParams;
+		// Handler for APQ request that contains the expected hash
+		server.use(
+			http.get("http://localhost:3000/graphql", ({ request }) => {
+				const params = new URL(request.url).searchParams;
 
-        if (params.get("extensions")?.includes("persistedQuery")) {
-          const extensions = JSON.parse(params.get("extensions") || "{}");
-          const hash = extensions.persistedQuery.sha256Hash;
+				if (params.get("extensions")?.includes("persistedQuery")) {
+					const extensions = JSON.parse(params.get("extensions") || "{}");
+					const hash = extensions.persistedQuery.sha256Hash;
 
-          // Check whether the given hash in the url is the same as us manually hashing the document
-          if (hash === expectedHash) {
-            return HttpResponse.json({
-              data: { posts: [{ id: 1 }] },
-            });
-          }
-        }
+					// Check whether the given hash in the url is the same as us manually hashing the document
+					if (hash === expectedHash) {
+						return HttpResponse.json({
+							data: { posts: [{ id: 1 }] },
+						});
+					}
+				}
 
-        return new HttpResponse("Not found", { status: 404 });
-      })
-    );
+				return new HttpResponse("Not found", { status: 404 });
+			}),
+		);
 
-    const result = await serverClient.fetch({
-      document,
-      variables: undefined,
-    });
+		const result = await serverClient.fetch({
+			document,
+			variables: undefined,
+		});
 
-    expect(result).toEqual({
-      data: { posts: [{ id: 1 }] },
-    });
-  });
+		expect(result).toEqual({
+			data: { posts: [{ id: 1 }] },
+		});
+	});
 
-  it("falls back to the query body if APQ fails", async () => {
-    const serverClient = createServerClient({
-      endpoint: "http://localhost:3000/graphql",
-    });
+	it("falls back to the query body if APQ fails", async () => {
+		const serverClient = createServerClient({
+			endpoint: "http://localhost:3000/graphql",
+		});
 
-    const document = new TypedDocumentString(
-      `
+		const document = new TypedDocumentString(
+			`
         query ListPostIds {
           posts { id }
         }
       `,
-      undefined
-    );
+			undefined,
+		);
 
-    server.use(
-      http.get("http://localhost:3000/graphql", ({ request }) => {
-        const params = new URL(request.url).searchParams;
+		server.use(
+			http.get("http://localhost:3000/graphql", ({ request }) => {
+				const params = new URL(request.url).searchParams;
 
-        // Just making sure that the op is being called
-        if (params.get("op") !== "ListPostIds") {
-          return HttpResponse.json({}, { status: 200 });
-        }
+				// Just making sure that the op is being called
+				if (params.get("op") !== "ListPostIds") {
+					return HttpResponse.json({}, { status: 200 });
+				}
 
-        return HttpResponse.json({
-          errors: [
-            {
-              message: "PersistedQueryNotFound",
-            },
-          ],
-        });
-      })
-    );
+				return HttpResponse.json({
+					errors: [
+						{
+							message: "PersistedQueryNotFound",
+						},
+					],
+				});
+			}),
+		);
 
-    const result = await serverClient.fetch({
-      document,
-      variables: undefined,
-    });
+		const result = await serverClient.fetch({
+			document,
+			variables: undefined,
+		});
 
-    expect(result).toEqual({
-      data: { posts: [{ id: 1 }] },
-    });
-  });
+		expect(result).toEqual({
+			data: { posts: [{ id: 1 }] },
+		});
+	});
 });
