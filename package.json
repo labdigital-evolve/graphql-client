@@ -4,7 +4,9 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"build": "bun ./build.ts"
+		"build": "bun ./build.ts",
+		"check": "bun biome check",
+		"test": "bun vitest"
 	},
 	"license": "MIT",
 	"private": true,
