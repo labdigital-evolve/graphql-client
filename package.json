@@ -1,44 +1,48 @@
 {
-	"name": "@labdigital/evolve-graphql-client",
-	"module": "dist/server.js",
-	"version": "0.0.1",
-	"type": "module",
-	"scripts": {
-		"build": "bun ./build.ts",
-		"check": "bun biome check",
-		"check:fix": "bun biome check --write",
-		"publish:ci": "bun build && bun changeset publish",
-		"publish:version": "bun changeset version && bun check:fix",
-		"test": "bun vitest"
-	},
-	"license": "MIT",
-	"private": true,
-	"author": "Boris Besemer <b.besemer@labdigital.nl>",
-	"exports": {
-		"./*": "./dist/*"
-	},
-	"typesVersions": {
-		"*": {
-			"*": ["./dist/*"]
-		}
-	},
-	"files": ["dist"],
-	"devDependencies": {
-		"@biomejs/biome": "1.9.4",
-		"@changesets/cli": "^2.29.3",
-		"@graphql-typed-document-node/core": "^3.2.0",
-		"@types/bun": "^1.2.10",
-		"bun-plugin-isolated-decl": "^0.1.10",
-		"msw": "^2.7.4",
-		"oxc-transform": "^0.64.0",
-		"vitest": "^3.1.1"
-	},
-	"peerDependencies": {
-		"typescript": "^5.8.3",
-		"graphql": "^16.10.0"
-	},
-	"dependencies": {
-		"@opentelemetry/api": "^1.9.0"
-	},
-	"packageManager": "bun@1.2.12"
+  "name": "@labdigital/evolve-graphql-client",
+  "module": "dist/server.js",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "bun ./build.ts",
+    "check": "bun biome check",
+    "check:fix": "bun biome check --write",
+    "publish:ci": "bun run build && bun changeset publish",
+    "publish:version": "bun changeset version && bun run check:fix",
+    "test": "bun vitest"
+  },
+  "license": "MIT",
+  "private": true,
+  "author": "Boris Besemer <b.besemer@labdigital.nl>",
+  "exports": {
+    "./*": "./dist/*"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/*"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@changesets/cli": "^2.29.3",
+    "@graphql-typed-document-node/core": "^3.2.0",
+    "@types/bun": "^1.2.10",
+    "bun-plugin-isolated-decl": "^0.1.10",
+    "msw": "^2.7.4",
+    "oxc-transform": "^0.64.0",
+    "vitest": "^3.1.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.3",
+    "graphql": "^16.10.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "packageManager": "bun@1.2.12"
 }
