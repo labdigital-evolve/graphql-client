@@ -67,5 +67,5 @@ jobs:
           version: bun run publish:version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.LABDIGITAL_NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.LABDIGITAL_NPM_TOKEN }}
